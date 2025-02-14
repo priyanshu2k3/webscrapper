@@ -2,70 +2,49 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const fs = require('fs');
 
-// Base URL of the page to scrape
-const baseUrl = 'https://www.1mg.com/drugs-all-medicines?page=';
+// URL of the page to scrape
+const url = 'https://www.google.com/search?q=modulo+function+in+python';
 
-async function scrapeAllPages() {
-  let page = 1;
-  let hasMorePages = true;
-  
-  // Clear the file before writing
-  fs.writeFileSync('products.txt', '', 'utf-8');
-  fs.writeFileSync('html', '', 'utf-8'); // Clear the HTML file as well
+async function fetchAndExtractIDs() {
+  try {
+    // Fetch the HTML of the page
+    const { data } = await axios.get(url);
 
-  while (hasMorePages) {
-    try {
-      // Construct the paginated URL
-      const url = `${baseUrl}${page}`;
-      console.log(`Scraping page ${page}...`);
-      
-      // Fetch the HTML of the page
-      const { data } = await axios.get(url);
-      const $ = cheerio.load(data);
+    // Save the HTML content to index.htm
+    fs.writeFileSync('index.htm', data, 'utf-8');
+    console.log('HTML content saved to index.htm');
 
-      // Write the entire HTML to the 'html' file
-      fs.appendFileSync('html', data + '\n\n', 'utf-8');
-      console.log(`HTML of page ${page} written to file.`);
+    // Load the HTML into cheerio
+    const $ = cheerio.load(data);
 
-      // Extract JSON data containing medicine names
-      let pageHasProducts = false;
-      const productNames = [];
-
-      $('script[type="application/ld+json"]').each((index, element) => {
-        try {
-          const jsonData = JSON.parse($(element).html());
-          if (jsonData.itemListElement) {
-            jsonData.itemListElement.forEach(item => {
-              if (item.name) {
-                productNames.push(item.name);
-                pageHasProducts = true;
-              }
-            });
-          }
-        } catch (err) {
-          console.error('Error parsing JSON:', err);
-        }
-      });
-      
-      // Write product names to file before proceeding to the next page
-      if (productNames.length > 0) {
-        fs.appendFileSync('products.txt', productNames.join('\n') + '\n', 'utf-8');
-        console.log(`Page ${page} products written to file.`);
+    // Extract all IDs from elements that have the 'id' attribute
+    const ids = [];
+    $('[id]').each((index, element) => {
+      const id = $(element).attr('id');
+      if (id) {
+        ids.push(id); // Only push non-empty ids
       }
-      
-      // Stop if no products found on the current page
-      if (!pageHasProducts) {
-        hasMorePages = false;
-      }
-      
-      page++;
-    } catch (error) {
-      console.error(`Error scraping page ${page}:`, error);
-      hasMorePages = false;
-    }
+    });
+
+    // Count occurrences of each ID
+    const idCounts = ids.reduce((acc, id) => {
+      acc[id] = (acc[id] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Format the output for writing to the ids file
+    const idOutput = Object.entries(idCounts)
+      .map(([id, count]) => `ID: ${id}, Count: ${count}`)
+      .join('\n');
+
+    // Save the IDs and their counts to the 'ids' file
+    fs.writeFileSync('ids', idOutput, 'utf-8');
+    console.log('ID count data saved to ids file');
+    
+  } catch (error) {
+    console.error('Error fetching or processing the HTML:', error);
   }
-  console.log('Scraping complete.');
 }
 
-// Run the scraper
-scrapeAllPages();
+// Run the function
+fetchAndExtractIDs();
